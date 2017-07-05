@@ -40,6 +40,7 @@ using System.Xml.Serialization;
 using System.IO;
 using System.Text;
 using System.Configuration;
+using System.Collections.Generic;
 
 namespace Hanselman.CST352
 {
@@ -50,14 +51,14 @@ namespace Hanselman.CST352
 	public delegate void SystemCall();
 
 	/// <summary>
-	/// The definition of an Operarting System, including a <see cref="MemoryManager"/> and a <see cref="ProcessCollection"/>
+	/// The definition of an Operarting System, including a <see cref="MemoryManager"/> and a <see cref="Process"/> list
 	/// </summary>
 	public class OS
 	{
-		/// <summary>
-		/// Contains the <see cref="Process"/> and the <see cref="Process.ProcessControlBlock"/> for all runningProcesses
-		/// </summary>
-		private ProcessCollection runningProcesses = new ProcessCollection();
+        /// <summary>
+        /// Contains the <see cref="Process"/> and the <see cref="Process.ProcessControlBlock"/> for all runningProcesses
+        /// </summary>
+        private List<Process> runningProcesses = new List<Process>();
 		/// <summary>
 		/// Holds a reference to the current running <see cref="Process"/>
 		/// </summary>
@@ -122,7 +123,7 @@ namespace Hanselman.CST352
 		/// Checks if the <see cref="currentProcess"/> is eligible to run
 		/// </summary>
 		/// <returns>true if the <see cref="currentProcess"/> is eligible to run</returns>
-		public bool currentProcessIsEligible()
+		public bool CurrentProcessIsEligible()
 		{
 			if (currentProcess == null) return false;
 
@@ -140,7 +141,7 @@ namespace Hanselman.CST352
 		/// <param name="processIndex">The Index (not the ProcessID!) in the <see cref="runningProcesses"/> table of a Process</param>
 		public void DumpProcessStatistics(int processIndex)
 		{
-			Process p = runningProcesses[processIndex];
+			var p = runningProcesses[processIndex];
 
 			Console.WriteLine("Removed Exited Process # {0}",p.PCB.pid);
 			Console.WriteLine("  # of Page Faults:      {0}",memoryMgr.PageFaultsForProcess(p));
@@ -153,14 +154,14 @@ namespace Hanselman.CST352
 		/// Spins through eligible processes and executes their opCodes
 		/// Provides scheduling and removes old processes.
 		/// </summary>
-		public void execute()
+		public void Execute()
 		{
 			while(true)
 			{
 				//
 				// Yank terminated processes
 				//
-				for (int i = runningProcesses.Count-1; i >= 0; i--)
+				for (var i = runningProcesses.Count-1; i >= 0; i--)
 				{
 					if (runningProcesses[i].PCB.state == ProcessState.Terminated)
 					{
@@ -186,7 +187,7 @@ namespace Hanselman.CST352
 				}
 				else
 				{
-					foreach (Process p in runningProcesses)
+					foreach (var p in runningProcesses)
 					{
 						switch (p.PCB.state)
 						{
@@ -214,9 +215,9 @@ namespace Hanselman.CST352
 								// Reset this flag. If we need to interrupt execution 
 								// because a lock has been made available
 								// or an Event has signaled, we can preempt the current process
-								bool bPreemptCurrentProcess = false;
+								var bPreemptCurrentProcess = false;
 
-								while (currentProcessIsEligible())
+								while (CurrentProcessIsEligible())
 								{
 									currentProcess.PCB.state = ProcessState.Running;
 									
@@ -225,7 +226,7 @@ namespace Hanselman.CST352
 
 									try
 									{
-										CPU.executeNextOpCode();
+										CPU.ExecuteNextOpCode();
 										currentProcess.PCB.clockCycles++;
 									}
 									catch(MemoryException e)
@@ -253,7 +254,7 @@ namespace Hanselman.CST352
 									//
 									// Update any sleeping processes
 									//
-									foreach (Process sleepingProcess in runningProcesses)
+									foreach (var sleepingProcess in runningProcesses)
 									{
 										switch(sleepingProcess.PCB.state)
 										{
@@ -272,9 +273,9 @@ namespace Hanselman.CST352
 												Debug.Assert(sleepingProcess.PCB.waitingEvent != 0);
 												
 												// Had the event been signalled recently?
-												if (this.events[sleepingProcess.PCB.waitingEvent] == EventState.Signaled)
+												if (events[sleepingProcess.PCB.waitingEvent] == EventState.Signaled)
 												{
-													this.events[sleepingProcess.PCB.waitingEvent] = EventState.NonSignaled;
+                                                    events[sleepingProcess.PCB.waitingEvent] = EventState.NonSignaled;
 													sleepingProcess.PCB.state = ProcessState.Ready;
 													sleepingProcess.PCB.waitingEvent = 0;
 													bPreemptCurrentProcess = true;
@@ -285,10 +286,10 @@ namespace Hanselman.CST352
 												Debug.Assert(sleepingProcess.PCB.waitingLock != 0);
 
 												// Has the lock be released recently?
-												if (this.locks[sleepingProcess.PCB.waitingLock] == 0)
+												if (locks[sleepingProcess.PCB.waitingLock] == 0)
 												{
-													// Acquire the Lock and wake up!
-													this.locks[sleepingProcess.PCB.waitingLock] = sleepingProcess.PCB.waitingLock;
+                                                    // Acquire the Lock and wake up!
+                                                    locks[sleepingProcess.PCB.waitingLock] = sleepingProcess.PCB.waitingLock;
 													sleepingProcess.PCB.state = ProcessState.Ready;													bPreemptCurrentProcess = true;
 													sleepingProcess.PCB.waitingLock = 0;
 													bPreemptCurrentProcess = true;
@@ -298,12 +299,17 @@ namespace Hanselman.CST352
 									}
 
 									// Have we used up our slice of time?
-									bool bEligible = currentProcess.PCB.clockCycles == 0 || (currentProcess.PCB.clockCycles % currentProcess.PCB.timeQuantum != 0);
-									if (!bEligible)	
-										break;
-									if (bPreemptCurrentProcess)		
-										break;
-								}
+									var bEligible = currentProcess.PCB.clockCycles == 0 || (currentProcess.PCB.clockCycles % currentProcess.PCB.timeQuantum != 0);
+									if (!bEligible)
+                                    {
+                                        break;
+                                    }
+
+                                    if (bPreemptCurrentProcess)
+                                    {
+                                        break;
+                                    }
+                                }
 								if (currentProcess.PCB.state != ProcessState.Terminated)
 								{
 									//copy state from CPU to PCB
@@ -336,7 +342,7 @@ namespace Hanselman.CST352
 		{
 			if (bool.Parse(EntryPoint.Configuration["DumpContextSwitch"]) == false)
 				return;
-			Console.WriteLine("Switching in Process {0} with ip at {1}",currentProcess.PCB.pid,currentProcess.PCB.ip);
+			Console.WriteLine("Switching in Process {0} with ip at {1}",currentProcess.PCB.pid,currentProcess.PCB.IP);
 		}
 
 		/// <summary>
@@ -347,7 +353,7 @@ namespace Hanselman.CST352
 		{
 			if (bool.Parse(EntryPoint.Configuration["DumpContextSwitch"]) == false)
 				return;
-			Console.WriteLine("Switching out Process {0} with ip at {1}",currentProcess.PCB.pid,CPU.ip);
+			Console.WriteLine("Switching out Process {0} with ip at {1}",currentProcess.PCB.pid,CPU.IP);
 		}
 
 		/// <summary>
@@ -356,18 +362,26 @@ namespace Hanselman.CST352
 		/// <param name="p">The Process to Dump</param>
 		public void DumpProcessMemory(Process p)
 		{
-			int address = 0; byte b;
+			var address = 0; byte b;
 			for (uint i = 0; i < p.PCB.processMemorySize; i++)
 			{
-				b = this.memoryMgr[p.PCB.pid,i];
+				b = memoryMgr[p.PCB.pid,i];
 				if (address == 0 || address%16==0)
-					Console.Write(System.Environment.NewLine + "{0,-4:000} ", address);
-				address++;
+                {
+                    Console.Write(System.Environment.NewLine + "{0,-4:000} ", address);
+                }
+
+                address++;
 				if (b == 0)
-					Console.Write("{0,3}","-");
-				else
-					Console.Write("{0,3}",(int)b);
-				if (address%4==0 && address%16!=0) Console.Write("  :");
+                {
+                    Console.Write("{0,3}","-");
+                }
+                else
+                {
+                    Console.Write("{0,3}",(int)b);
+                }
+
+                if (address%4==0 && address%16!=0) Console.Write("  :");
 			}
 			Console.WriteLine();
 		}
@@ -378,9 +392,9 @@ namespace Hanselman.CST352
 		private void SaveCPUState()
 		{
 			CPU.registers.CopyTo(currentProcess.PCB.registers,0);
-			currentProcess.PCB.zf = CPU.zf;
-			currentProcess.PCB.sf = CPU.sf;
-			currentProcess.PCB.ip = CPU.ip;
+			currentProcess.PCB.ZF = CPU.ZF;
+			currentProcess.PCB.SF = CPU.SF;
+			currentProcess.PCB.IP = CPU.IP;
 		}
 
 		/// <summary>
@@ -389,9 +403,9 @@ namespace Hanselman.CST352
 		private void LoadCPUState()
 		{
 			currentProcess.PCB.registers.CopyTo(CPU.registers,0);
-			CPU.zf = currentProcess.PCB.zf;
-			CPU.sf = currentProcess.PCB.sf;
-			CPU.ip = currentProcess.PCB.ip;
+			CPU.ZF = currentProcess.PCB.ZF;
+			CPU.SF = currentProcess.PCB.SF;
+			CPU.IP = currentProcess.PCB.IP;
 		}
 
 		/// <summary>
@@ -400,34 +414,36 @@ namespace Hanselman.CST352
 		/// <param name="prog">Program to load</param>
 		/// <param name="memorySize">Size of memory in bytes to assign to this Process</param>
 		/// <returns>The newly created Process</returns>
-		public Process createProcess(Program prog, uint memorySize)
+		public Process CreateProcess(Program prog, uint memorySize)
 		{
 			// Get an array represting the code block
-			byte[] processCode = prog.GetMemoryImage();
+			var processCode = prog.GetMemoryImage();
 
 			// Create a process with a unique id and fixed memory size
-			Process p = new Process(++processIdPool, memorySize);
-			
-			// Map memory to the Process (if available, otherwise freak out)
-			this.memoryMgr.MapMemoryToProcess(p.PCB.processMemorySize,p.PCB.pid);
+			var p = new Process(++processIdPool, memorySize);
+
+            // Map memory to the Process (if available, otherwise freak out)
+            memoryMgr.MapMemoryToProcess(p.PCB.processMemorySize,p.PCB.pid);
 			
 			// Set the initial IP to 0 (that's where exectution will begin)
-			p.PCB.ip = 0; 
+			p.PCB.IP = 0; 
 
 			//
 			// SETUP CODE SECTION
 			//
 			// Copy the code in one byte at a time
 			uint index = 0;
-			foreach (byte b in processCode)
-				memoryMgr[p.PCB.pid, index++] = b;
+			foreach (var b in processCode)
+            {
+                memoryMgr[p.PCB.pid, index++] = b;
+            }
 
-			//
-			// SETUP STACK SECTION
-			//
-			// Set stack pointer at the end of memory
-			//
-			p.PCB.sp = memorySize-1;
+            //
+            // SETUP STACK SECTION
+            //
+            // Set stack pointer at the end of memory
+            //
+            p.PCB.SP = memorySize-1;
 			p.PCB.stackSize = uint.Parse(EntryPoint.Configuration["StackSize"]);
 
 			//
@@ -435,7 +451,7 @@ namespace Hanselman.CST352
 			//
 			// Set the length of the Code section
 			//
-			uint roundedCodeLength = CPU.UtilRoundToBoundary((uint)processCode.Length, CPU.pageSize);
+			var roundedCodeLength = CPU.UtilRoundToBoundary((uint)processCode.Length, CPU.pageSize);
 			//uint roundedCodeLength = (uint)(CPU.pageSize * ((processCode.Length / CPU.pageSize) + ((processCode.Length % CPU.pageSize > 0) ? 1: 0)));
 			p.PCB.codeSize = roundedCodeLength;
 
@@ -452,9 +468,9 @@ namespace Hanselman.CST352
 			//
 			p.PCB.heapAddrStart = p.PCB.codeSize + p.PCB.dataSize;
 			p.PCB.heapAddrEnd = p.PCB.processMemorySize - p.PCB.stackSize;
-		
 
-			this.memoryMgr.CreateHeapTableForProcess(p);
+
+            memoryMgr.CreateHeapTableForProcess(p);
 
 			// Add ourselves to the runningProcesses table
 			runningProcesses.Add(p);
@@ -468,20 +484,24 @@ namespace Hanselman.CST352
 		/// <param name="pid">Process ID</param>
 		public void ReleaseLocksOfProccess(uint pid)
 		{	
-			for (int i = 0; i < this.locks.Length; i++)
-				if (this.locks[i] == pid) 
-					this.locks[i] = 0;
-		}
+			for (var i = 0; i < locks.Length; i++)
+            {
+                if (locks[i] == pid)
+                {
+                    locks[i] = 0;
+                }
+            }
+        }
 
 
 		/// <summary>
-		/// Utility function to fetch a 4 byte unsigned int from Process Memory based on the current <see cref="CPU.ip"/>
+		/// Utility function to fetch a 4 byte unsigned int from Process Memory based on the current <see cref="CPU.IP"/>
 		/// </summary>
 		/// <returns>a new uint</returns>
 		public unsafe uint FetchUIntAndMove()
 		{
-			uint retVal = memoryMgr.getUIntFrom(currentProcess.PCB.pid,CPU.ip);
-			CPU.ip += sizeof(uint);
+			var retVal = memoryMgr.GetUIntFrom(currentProcess.PCB.pid,CPU.IP);
+			CPU.IP += sizeof(uint);
 			return retVal;
 		}
 
@@ -492,12 +512,12 @@ namespace Hanselman.CST352
 		public void Incr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];	
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];	
 			Debug.Assert(InstructionType.Incr == instruction);
 			
 			//move to the param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -514,13 +534,13 @@ namespace Hanselman.CST352
 		public void Addi()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Addi == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
-			uint param1 = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
+			var param1 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} {3}",currentProcess.PCB.pid, instruction, register, param1);
 
@@ -537,13 +557,13 @@ namespace Hanselman.CST352
 		public void Addr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Addr == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
-			uint param1 = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
+			var param1 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} {3}",currentProcess.PCB.pid, instruction, register, param1);
 
@@ -561,24 +581,24 @@ namespace Hanselman.CST352
 		public void Cmpi()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Cmpi == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
-			uint param1 = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
+			var param1 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} {3}",currentProcess.PCB.pid, instruction, register, param1);
 
 			//compare register and const
-			CPU.zf = false;
+			CPU.ZF = false;
 			if (CPU.registers[register] < param1) 
-				CPU.sf = true;
+				CPU.SF = true;
 			if (CPU.registers[register] > param1) 
-				CPU.sf = false;
+				CPU.SF = false;
 			if (CPU.registers[register] == param1)
-				CPU.zf = true;
+				CPU.ZF = true;
 		}
 
 		/// <summary>
@@ -591,24 +611,24 @@ namespace Hanselman.CST352
 		public void Cmpr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Cmpr == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
 			//compare register and const
-			CPU.zf = false;
+			CPU.ZF = false;
 			if (CPU.registers[register1] < CPU.registers[register2]) 
-				CPU.sf = true;
+				CPU.SF = true;
 			if (CPU.registers[register1] > CPU.registers[register2]) 
-				CPU.sf = false;
+				CPU.SF = false;
 			if (CPU.registers[register1] == CPU.registers[register2])
-				CPU.zf = true;
+				CPU.ZF = true;
 		}
 
 		/// <summary>
@@ -621,18 +641,18 @@ namespace Hanselman.CST352
 		public void Call()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Call == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			StackPush(currentProcess.PCB.pid, CPU.ip);
+			StackPush(currentProcess.PCB.pid, CPU.IP);
 
-			CPU.ip+= CPU.registers[register];
+			CPU.IP+= CPU.registers[register];
 		}
 
 		/// <summary>
@@ -645,18 +665,18 @@ namespace Hanselman.CST352
 		public void Callm()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Callm == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			StackPush(currentProcess.PCB.pid, CPU.ip);
+			StackPush(currentProcess.PCB.pid, CPU.IP);
 
-			CPU.ip+= this.memoryMgr[currentProcess.PCB.pid,CPU.registers[register]];
+			CPU.IP+= memoryMgr[currentProcess.PCB.pid,CPU.registers[register]];
 		}
 
 		/// <summary>
@@ -668,14 +688,14 @@ namespace Hanselman.CST352
 		public void Ret()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Ret == instruction);
 			
-			CPU.ip++;
+			CPU.IP++;
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1}",currentProcess.PCB.pid, instruction);
 
-			CPU.ip = StackPop(currentProcess.PCB.pid);
+			CPU.IP = StackPop(currentProcess.PCB.pid);
 		}
 
 
@@ -690,22 +710,22 @@ namespace Hanselman.CST352
 		public void Jmp()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Jmp == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			int instructionsToSkip = (int)CPU.registers[register];
+			var instructionsToSkip = (int)CPU.registers[register];
 			// Do some sillyness to substract if we are a negative number
 			if (Math.Sign(instructionsToSkip) == -1)
-				CPU.ip-= (uint)Math.Abs(instructionsToSkip);
+				CPU.IP-= (uint)Math.Abs(instructionsToSkip);
 			else
-				CPU.ip+= (uint)instructionsToSkip;
+				CPU.IP+= (uint)instructionsToSkip;
 		}
 
 		/// <summary>
@@ -717,18 +737,18 @@ namespace Hanselman.CST352
 		public void Jlt()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Jlt == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			if (CPU.sf == true)
+			if (CPU.SF == true)
 			{
-				CPU.ip+= CPU.registers[register];
+				CPU.IP+= CPU.registers[register];
 			}
 		}
 
@@ -741,18 +761,18 @@ namespace Hanselman.CST352
 		public void Jgt()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Jgt == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			if (CPU.sf == false)
+			if (CPU.SF == false)
 			{
-				CPU.ip+= CPU.registers[register];
+				CPU.IP+= CPU.registers[register];
 			}
 		}
 
@@ -765,18 +785,18 @@ namespace Hanselman.CST352
 		public void Je()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Je == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 		
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			if (CPU.zf == true)
+			if (CPU.ZF == true)
 			{
-				CPU.ip+= CPU.registers[register];
+				CPU.IP+= CPU.registers[register];
 			}
 		}
 
@@ -799,7 +819,7 @@ namespace Hanselman.CST352
 		public void Exit()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Exit == instruction);
 				
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1}",currentProcess.PCB.pid, instruction);
@@ -816,12 +836,12 @@ namespace Hanselman.CST352
 		public void Movi()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Movi == instruction);
 			
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
-			uint param2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
+			var param2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} {3}",currentProcess.PCB.pid, instruction, register, param2);
 
@@ -838,13 +858,13 @@ namespace Hanselman.CST352
 		public void Movr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Movr == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
@@ -861,18 +881,18 @@ namespace Hanselman.CST352
 		public void Movmr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Movmr == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 			
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
 			//move VALUE of memory pointed to by 2nd register into 1st register 
-			CPU.registers[register1] = memoryMgr.getUIntFrom(currentProcess.PCB.pid,CPU.registers[register2]);
+			CPU.registers[register1] = memoryMgr.GetUIntFrom(currentProcess.PCB.pid,CPU.registers[register2]);
 		}
 
 		/// <summary>
@@ -884,18 +904,18 @@ namespace Hanselman.CST352
 		public void Movrm()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Movrm == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
 			//set memory pointed to by register 1 to contents of register2
-			memoryMgr.setUIntAt(currentProcess.PCB.pid,CPU.registers[register1],CPU.registers[register2]);
+			memoryMgr.SetUIntAt(currentProcess.PCB.pid,CPU.registers[register1],CPU.registers[register2]);
 		}
 
 		/// <summary>
@@ -907,18 +927,18 @@ namespace Hanselman.CST352
 		public void Movmm()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Movmm == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
 			//set memory point to by register 1 to contents of memory pointed to by register 2
-			memoryMgr.setUIntAt(currentProcess.PCB.pid,CPU.registers[register1],memoryMgr.getUIntFrom(currentProcess.PCB.pid,CPU.registers[register2]));
+			memoryMgr.SetUIntAt(currentProcess.PCB.pid,CPU.registers[register1],memoryMgr.GetUIntFrom(currentProcess.PCB.pid,CPU.registers[register2]));
 		}
 
 		/// <summary>
@@ -930,12 +950,12 @@ namespace Hanselman.CST352
 		public void Printr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Printr == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -951,12 +971,12 @@ namespace Hanselman.CST352
 		public void Printm()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Printm == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -972,12 +992,12 @@ namespace Hanselman.CST352
 		public void Input()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Input == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -996,12 +1016,12 @@ namespace Hanselman.CST352
 		public void Sleep()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Sleep == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -1020,12 +1040,12 @@ namespace Hanselman.CST352
 		public void SetPriority()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.SetPriority== instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -1041,12 +1061,12 @@ namespace Hanselman.CST352
 		public void Pushr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Pushr == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -1062,12 +1082,12 @@ namespace Hanselman.CST352
 		public void Pushi()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Pushi == instruction);
 			
 			//move to the param containing the 1st param
-			CPU.ip++;
-			uint param = FetchUIntAndMove();
+			CPU.IP++;
+			var param = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} {2}",currentProcess.PCB.pid, instruction, param);
 
@@ -1083,16 +1103,16 @@ namespace Hanselman.CST352
 		public void TerminateProcess()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.TerminateProcess == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			foreach (Process p in this.runningProcesses)
+			foreach (var p in runningProcesses)
 			{
 				if (p.PCB.pid == CPU.registers[register])
 				{
@@ -1112,12 +1132,12 @@ namespace Hanselman.CST352
 		public void Popr()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Popr == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
@@ -1133,18 +1153,18 @@ namespace Hanselman.CST352
 		public void MemoryClear()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.MemoryClear == instruction);
 			
 			//move to the param containing the 1st register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
-			//move VALUE of memory pointed to by 2nd register into 1st register 
-			this.memoryMgr.SetMemoryOfProcess(currentProcess.PCB.pid,CPU.registers[register1],CPU.registers[register2],0);
+            //move VALUE of memory pointed to by 2nd register into 1st register 
+            memoryMgr.SetMemoryOfProcess(currentProcess.PCB.pid,CPU.registers[register1],CPU.registers[register2],0);
 		}
 
 		/// <summary>
@@ -1156,16 +1176,16 @@ namespace Hanselman.CST352
 		public void Popm()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Popm == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
-			memoryMgr.setUIntAt(currentProcess.PCB.pid,CPU.registers[register],StackPop(currentProcess.PCB.pid));
+			memoryMgr.SetUIntAt(currentProcess.PCB.pid,CPU.registers[register],StackPop(currentProcess.PCB.pid));
 		}
 
 		/// <summary>
@@ -1179,24 +1199,24 @@ namespace Hanselman.CST352
 		public void AcquireLock()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.AcquireLock == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
 			//Are we the first ones here? with a valid lock?
 			if (CPU.registers[register] > 0 && CPU.registers[register] <= 10)
 			{
-				if (this.locks[CPU.registers[register]] == 0)
+				if (locks[CPU.registers[register]] == 0)
 				{
-					//Set the lock specified in the register as locked...
-					this.locks[CPU.registers[register]] = currentProcess.PCB.pid;
+                    //Set the lock specified in the register as locked...
+                    locks[CPU.registers[register]] = currentProcess.PCB.pid;
 				}
-				else if (this.locks[CPU.registers[register]] == currentProcess.PCB.pid)
+				else if (locks[CPU.registers[register]] == currentProcess.PCB.pid)
 				{
 					//No-Op, we already have this lock
 					; 
@@ -1223,22 +1243,22 @@ namespace Hanselman.CST352
 		public void ReleaseLock()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.ReleaseLock == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 
 			//Release only if we already have this lock, and it's a valid lock
 			if (CPU.registers[register] > 0 && CPU.registers[register] <= 10)
 			{
-				if (this.locks[CPU.registers[register]] == currentProcess.PCB.pid)
+				if (locks[CPU.registers[register]] == currentProcess.PCB.pid)
 				{
-					//set the lock back to 0 (the OS)
-					this.locks[CPU.registers[register]] = 0;
+                    //set the lock back to 0 (the OS)
+                    locks[CPU.registers[register]] = 0;
 				}
 			}
 		}
@@ -1252,18 +1272,18 @@ namespace Hanselman.CST352
 		public void SignalEvent()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.SignalEvent == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 			
 			if (CPU.registers[register] > 0 && CPU.registers[register] <= 10)
 			{
-				this.events[CPU.registers[register]] = EventState.Signaled;
+                events[CPU.registers[register]] = EventState.Signaled;
 			}
 		}
 
@@ -1276,12 +1296,12 @@ namespace Hanselman.CST352
 		public void WaitEvent()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.WaitEvent == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register = FetchUIntAndMove();
+			CPU.IP++;
+			var register = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register);
 			
@@ -1301,17 +1321,17 @@ namespace Hanselman.CST352
 		public void MapSharedMem()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.MapSharedMem == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove();
-			uint register2 = FetchUIntAndMove();
+			CPU.IP++;
+			var register1 = FetchUIntAndMove();
+			var register2 = FetchUIntAndMove();
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 			
-			CPU.registers[register2] = this.memoryMgr.MapSharedMemoryToProcess(CPU.registers[register1], currentProcess.PCB.pid);
+			CPU.registers[register2] = memoryMgr.MapSharedMemoryToProcess(CPU.registers[register1], currentProcess.PCB.pid);
 		}
 
 		
@@ -1325,17 +1345,17 @@ namespace Hanselman.CST352
 		public void Alloc()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.Alloc == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove(); //bytes requested
-			uint register2 = FetchUIntAndMove(); //address returned
+			CPU.IP++;
+			var register1 = FetchUIntAndMove(); //bytes requested
+			var register2 = FetchUIntAndMove(); //address returned
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2} r{3}",currentProcess.PCB.pid, instruction, register1, register2);
 
-			uint addr = this.memoryMgr.ProcessHeapAlloc(currentProcess, CPU.registers[register1]);
+			var addr = memoryMgr.ProcessHeapAlloc(currentProcess, CPU.registers[register1]);
 
 			CPU.registers[register2] = addr;
 		}
@@ -1349,16 +1369,16 @@ namespace Hanselman.CST352
 		public void FreeMemory()
 		{
 			//get the instruction and make sure we should be here
-			InstructionType instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.ip];
+			var instruction = (InstructionType)memoryMgr[currentProcess.PCB.pid,CPU.IP];
 			Debug.Assert(InstructionType.FreeMemory == instruction);
 			
 			//move to the param containing the register
-			CPU.ip++;
-			uint register1 = FetchUIntAndMove(); //address of memory
+			CPU.IP++;
+			var register1 = FetchUIntAndMove(); //address of memory
 
 			if (bDumpInstructions) Console.WriteLine(" Pid:{0} {1} r{2}",currentProcess.PCB.pid, instruction, register1);
 
-			this.memoryMgr.ProcessHeapFree(currentProcess, CPU.registers[register1]);
+            memoryMgr.ProcessHeapFree(currentProcess, CPU.registers[register1]);
 		}
 
 
@@ -1370,13 +1390,13 @@ namespace Hanselman.CST352
 		public void StackPush(uint processid, uint avalue)
 		{
 
-			CPU.sp -= 4;
+			CPU.SP -= 4;
 
 			//Are we blowing the stack?
-			if (CPU.sp < (currentProcess.PCB.processMemorySize - 1 - currentProcess.PCB.stackSize))
-				throw (new StackException(currentProcess.PCB.pid, currentProcess.PCB.processMemorySize - 1 - currentProcess.PCB.stackSize - CPU.sp));
-	
-			this.memoryMgr.setUIntAt(processid,CPU.sp,avalue);
+			if (CPU.SP < (currentProcess.PCB.processMemorySize - 1 - currentProcess.PCB.stackSize))
+				throw (new StackException(currentProcess.PCB.pid, currentProcess.PCB.processMemorySize - 1 - currentProcess.PCB.stackSize - CPU.SP));
+
+            memoryMgr.SetUIntAt(processid,CPU.SP,avalue);
 		}
 
 		/// <summary>
@@ -1386,9 +1406,9 @@ namespace Hanselman.CST352
 		/// <returns>the uint from the stack</returns>
 		public uint StackPop(uint processid)
 		{
-			uint retVal = this.memoryMgr.getUIntFrom(processid,CPU.sp);
-			this.memoryMgr.SetMemoryOfProcess(processid,CPU.sp,4,0);
-			CPU.sp += 4;
+			var retVal = memoryMgr.GetUIntFrom(processid,CPU.SP);
+            memoryMgr.SetMemoryOfProcess(processid,CPU.SP,4,0);
+			CPU.SP += 4;
 			return retVal;
 		}
 	}

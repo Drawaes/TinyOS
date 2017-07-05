@@ -9,6 +9,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TinyOSCore", "src\TinyOSCor
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7C405F39-2520-4BEE-90BC-FDBD4FFD46B7}"
 	ProjectSection(SolutionItems) = preProject
+		.EditorConfig = .EditorConfig
 		BuildAndRunAllTests.bat = BuildAndRunAllTests.bat
 		BuildAndRunAllTests.sh = BuildAndRunAllTests.sh
 		LICENSE = LICENSE

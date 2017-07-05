@@ -43,7 +43,7 @@ namespace Hanselman.CST352
 	/// <summary>
 	/// "Bootstraps" the system by creating an <see cref="OS"/>, setting the size of the <see cref="CPU"/>'s memory, 
 	/// and loading each <see cref="Program"/> into memory.  Then, for each <see cref="Program"/> we create a 
-	/// <see cref="Process"/>.  Then we start everything by calling <see cref="OS.execute()"/>
+	/// <see cref="Process"/>.  Then we start everything by calling <see cref="OS.Execute()"/>
 	/// </summary>
 	class EntryPoint
 	{
@@ -77,7 +77,7 @@ namespace Hanselman.CST352
 					bytesOfPhysicalMemory = uint.Parse(Configuration["PhysicalMemory"]);
 
 					// Setup static physical memory
-					CPU.initPhysicalMemory(bytesOfPhysicalMemory); 
+					CPU.InitPhysicalMemory(bytesOfPhysicalMemory); 
 
 					// Create the OS and Memory Manager with Virtual Memory
 					theOS = new OS(bytesOfVirtualMemory);
@@ -94,14 +94,14 @@ namespace Hanselman.CST352
 						if (File.Exists(args[i]))
 						{
 							Program p = Program.LoadProgram(args[i]);
-							Process rp = theOS.createProcess(p, uint.Parse(Configuration["ProcessMemory"]));
+							Process rp = theOS.CreateProcess(p, uint.Parse(Configuration["ProcessMemory"]));
 							Console.WriteLine("Process id {0} has {1} bytes of process memory and {2} bytes of heap",rp.PCB.pid,Configuration["ProcessMemory"],rp.PCB.heapAddrEnd-rp.PCB.heapAddrStart);
 							p.DumpProgram();
 						}
 					}
 
 					// Start executing!
-					theOS.execute();
+					theOS.Execute();
 				}
 				//catch (Exception e)
 				{

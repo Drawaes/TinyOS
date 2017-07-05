@@ -42,6 +42,7 @@ using System.Threading;
 using System.Text;
 using System.Configuration;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Collections.Generic;
 
 namespace Hanselman.CST352
 {
@@ -80,18 +81,20 @@ namespace Hanselman.CST352
 			// Size of memory must be a factor of CPU.pageSize
 			// This was asserted when the CPU initialized memory
 			//
-			uint physicalpages = (uint)(CPU.physicalMemory.Length/CPU.pageSize);
-			uint addressablepages = (uint)(virtualMemSize/CPU.pageSize);
+			var physicalpages = (uint)(CPU.physicalMemory.Length/CPU.pageSize);
+			var addressablepages = (uint)(virtualMemSize/CPU.pageSize);
 			
 			_pageTable = new ArrayList((int)addressablepages);
 
 			// Delete all our Swap Files
-			foreach (string f in Directory.GetFiles(".","*.xml"))
-				File.Delete(f);
+			foreach (var f in Directory.GetFiles(".","*.xml"))
+            {
+                File.Delete(f);
+            }
 
-			// For all off addressable memory...
-			// Make the pages in physical and the pages that aren't in physical
-			for (uint i = 0;i < virtualMemSize; i+=CPU.pageSize)
+            // For all off addressable memory...
+            // Make the pages in physical and the pages that aren't in physical
+            for (uint i = 0;i < virtualMemSize; i+=CPU.pageSize)
 			{
 				// Mark the Pages that are in physical memory as "false" or "not free"
 				MemoryPage p;
@@ -108,12 +111,12 @@ namespace Hanselman.CST352
 			//
 			// Cordon off some shared memory regions...these are setting the AppSettings
 			//
-			uint SharedRegionsSize = uint.Parse(EntryPoint.Configuration["SharedMemoryRegionSize"]);
-			uint SharedRegions = uint.Parse(EntryPoint.Configuration["NumOfSharedMemoryRegions"]);
+			var SharedRegionsSize = uint.Parse(EntryPoint.Configuration["SharedMemoryRegionSize"]);
+			var SharedRegions = uint.Parse(EntryPoint.Configuration["NumOfSharedMemoryRegions"]);
 			if (SharedRegions > 0 && SharedRegionsSize > 0)
 			{
-				uint TotalPagesNeeded = (uint)(SharedRegions*SharedRegionsSize/CPU.pageSize);
-				uint pagesPerRegion = TotalPagesNeeded/SharedRegions;
+				var TotalPagesNeeded = (uint)(SharedRegions*SharedRegionsSize/CPU.pageSize);
+				var pagesPerRegion = TotalPagesNeeded/SharedRegions;
 
 				// ForExample: 
 				// I need 2 regions
@@ -154,24 +157,24 @@ namespace Hanselman.CST352
 		public uint ProcessHeapAlloc(Process p, uint bytesRequested)
 		{
 			// Round up to the nearest page boundary
-			uint pagesRequested = MemoryManager.BytesToPages(bytesRequested);
+			var pagesRequested = MemoryManager.BytesToPages(bytesRequested);
 			uint addrStart = 0;
 
-			//
-			// Finds n *Contiguous* Pages
-			//
+            //
+            // Finds n *Contiguous* Pages
+            //
 
-			// Start with a list of potentialPages...
-			ArrayList potentialPages =  new ArrayList();
+            // Start with a list of potentialPages...
+            var potentialPages = new List<MemoryPage>();
 			
 			// Look through all the pages in our heap
-			for (int i = 0; i < p.PCB.heapPageTable.Count; i++)
+			for (var i = 0; i < p.PCB.heapPageTable.Count; i++)
 			{
 				// The pages must be contiguous
-				bool bContiguous = true;
+				var bContiguous = true;
 				
 				//From this start page, check for contiguous free pages nearby
-				MemoryPage startPage = (MemoryPage)p.PCB.heapPageTable[i];
+				var startPage = p.PCB.heapPageTable[i];
 
 				//Is this page, and x ahead of it free?
 				if (startPage.heapAllocationAddr == 0)
@@ -180,13 +183,15 @@ namespace Hanselman.CST352
 					potentialPages.Add(startPage);
 
 					//Is this page, and x ahead of it free?
-					for (int j = 1; j < pagesRequested;j++)
+					for (var j = 1; j < pagesRequested;j++)
 					{
 						// Have we walked past the end of the heap?
 						if ((i+j) >= p.PCB.heapPageTable.Count)
-							throw new HeapException(p.PCB.pid, pagesRequested*CPU.pageSize);
+                        {
+                            throw new HeapException(p.PCB.pid, pagesRequested*CPU.pageSize);
+                        }
 
-						MemoryPage nextPage = (MemoryPage)p.PCB.heapPageTable[i+j];
+                        var nextPage = p.PCB.heapPageTable[i + j];
 						if (nextPage.heapAllocationAddr == 0) 
 							potentialPages.Add(nextPage);
 						else
@@ -200,15 +205,19 @@ namespace Hanselman.CST352
 
 			// Did we not find enough pages?
 			if (potentialPages.Count != pagesRequested)
-				throw new HeapException(p.PCB.pid, pagesRequested*CPU.pageSize);
+            {
+                throw new HeapException(p.PCB.pid, pagesRequested*CPU.pageSize);
+            }
 
-			// Mark each page with the address of the original alloc 
-			// so we can Free them later
-			addrStart = ((MemoryPage)potentialPages[0]).addrProcessIndex;
-			foreach (MemoryPage page in potentialPages)
-				page.heapAllocationAddr = addrStart;
+            // Mark each page with the address of the original alloc 
+            // so we can Free them later
+            addrStart = potentialPages[0].addrProcessIndex;
+			foreach (var page in potentialPages)
+            {
+                page.heapAllocationAddr = addrStart;
+            }
 
-			return addrStart;
+            return addrStart;
 		}
 
 
@@ -226,7 +235,7 @@ namespace Hanselman.CST352
 		public uint ProcessHeapFree(Process p, uint startAddr)
 		{
 			uint pageCount = 0;
-			foreach (MemoryPage page in p.PCB.heapPageTable)
+			foreach (var page in p.PCB.heapPageTable)
 			{
 				if (page.heapAllocationAddr == startAddr)
 				{
@@ -267,38 +276,32 @@ namespace Hanselman.CST352
 		}
 
 
-		/// <summary>
-		/// Gets a 4 byte unsigned integer (typically an opCode param) from memory
-		/// </summary>
-		/// <param name="processid">The calling processid</param>
-		/// <param name="processIndex">The address in memory from the Process's point of view</param>
-		/// <returns></returns>
-		public uint getUIntFrom(uint processid, uint processIndex)
-		{
-			return CPU.BytesToUInt(getBytesFrom(processid, processIndex, 4));
-		}
+        /// <summary>
+        /// Gets a 4 byte unsigned integer (typically an opCode param) from memory
+        /// </summary>
+        /// <param name="processid">The calling processid</param>
+        /// <param name="processIndex">The address in memory from the Process's point of view</param>
+        /// <returns></returns>
+        public uint GetUIntFrom(uint processid, uint processIndex) => CPU.BytesToUInt(GetBytesFrom(processid, processIndex, 4));
 
-		/// <summary>
-		/// Sets a 4 byte unsigned integer (typically an opCode param) to memory
-		/// </summary>
-		/// <param name="processid">The calling processid</param>
-		/// <param name="processIndex">The address in memory from the Process's point of view</param>
-		/// <param name="avalue">The new value</param>
-		public void setUIntAt(uint processid, uint processIndex, uint avalue)
-		{
-			setBytesAt(processid, processIndex, CPU.UIntToBytes(avalue));
-		}
+        /// <summary>
+        /// Sets a 4 byte unsigned integer (typically an opCode param) to memory
+        /// </summary>
+        /// <param name="processid">The calling processid</param>
+        /// <param name="processIndex">The address in memory from the Process's point of view</param>
+        /// <param name="avalue">The new value</param>
+        public void SetUIntAt(uint processid, uint processIndex, uint avalue) => SetBytesAt(processid, processIndex, CPU.UIntToBytes(avalue));
 
-		/// <summary>
-		/// Gets an array of "length" bytes from a specific process's memory address
-		/// </summary>
-		/// <param name="processid">The calling process's id</param>
-		/// <param name="processIndex">The address in memory from the Process's point of view</param>
-		/// <param name="length">how many bytes</param>
-		/// <returns>an initialized byte array containing the contents of memory</returns>
-		public byte[] getBytesFrom(uint processid, uint processIndex, uint length)
+        /// <summary>
+        /// Gets an array of "length" bytes from a specific process's memory address
+        /// </summary>
+        /// <param name="processid">The calling process's id</param>
+        /// <param name="processIndex">The address in memory from the Process's point of view</param>
+        /// <param name="length">how many bytes</param>
+        /// <returns>an initialized byte array containing the contents of memory</returns>
+        public byte[] GetBytesFrom(uint processid, uint processIndex, uint length)
 		{
-			byte[] bytes = new byte[length];
+			var bytes = new byte[length];
 			for (uint i = 0; i < length; i++)
 			{
 				bytes[i] = this[processid, processIndex + i];
@@ -312,7 +315,7 @@ namespace Hanselman.CST352
 		/// <param name="processid">The calling processid</param>
 		/// <param name="processIndex">The address in memory from the Process's point of view</param>
 		/// <param name="pageValue">The source array of bytes</param>
-		public void setBytesAt(uint processid, uint processIndex, byte[] pageValue)
+		public void SetBytesAt(uint processid, uint processIndex, byte[] pageValue)
 		{
 			for (uint i = 0; i < pageValue.Length; i++)
 			{
@@ -341,7 +344,7 @@ namespace Hanselman.CST352
 					if((processMemoryIndex >= page.addrProcessIndex) && (processMemoryIndex < page.addrProcessIndex+CPU.pageSize))
 					{
 						// Get the page offset
-						uint pageOffset = processMemoryIndex - page.addrProcessIndex;
+						var pageOffset = processMemoryIndex - page.addrProcessIndex;
 						return ProcessAddrToPhysicalAddrHelper(page, dirtyFlag, pageOffset);
 					}
 				}
@@ -350,7 +353,7 @@ namespace Hanselman.CST352
 				if (page.SharedMemoryRegion != 0)
 				{
 					// Go through the list of owners and see if we are one...
-					for (int i = 0; i <= page.pidSharedOwnerList.Count-1; i++)
+					for (var i = 0; i <= page.pidSharedOwnerList.Count-1; i++)
 					{
 						// Do we own this page?
 						if ((uint)page.pidSharedOwnerList[i] == processid)
@@ -358,7 +361,7 @@ namespace Hanselman.CST352
 							// Does this page handle this address?
 							if (processMemoryIndex >= (uint)page.pidSharedProcessIndex[i] && processMemoryIndex < (uint)page.pidSharedProcessIndex[i]+CPU.pageSize)
 							{
-								uint pageOffset = processMemoryIndex - (uint)page.pidSharedProcessIndex[i];
+								var pageOffset = processMemoryIndex - (uint)page.pidSharedProcessIndex[i];
 								return ProcessAddrToPhysicalAddrHelper(page, dirtyFlag, pageOffset);
 							}
 						}
@@ -374,7 +377,7 @@ namespace Hanselman.CST352
 		private uint ProcessAddrToPhysicalAddrHelper(MemoryPage page, bool dirtyFlag, uint pageOffset)
 		{
 			// Get the page offset
-			uint virtualIndex = page.addrVirtual+pageOffset;
+			var virtualIndex = page.addrVirtual+pageOffset;
 						
 			// Update Flags for this process
 			page.isDirty = dirtyFlag || page.isDirty;
@@ -383,7 +386,7 @@ namespace Hanselman.CST352
 						
 			// Take this new "virtual" address (relative to all addressable memory)
 			// and translate it to physical ram.  Page Faults may occur inside this next call.
-			uint physicalIndex = VirtualAddrToPhysical(page,virtualIndex);
+			var physicalIndex = VirtualAddrToPhysical(page,virtualIndex);
 			return physicalIndex;
 		}
 
@@ -398,7 +401,7 @@ namespace Hanselman.CST352
 			if (page.isValid == true)
 			{
 				// Make this page as availble in physical memory
-				uint i = page.addrPhysical / CPU.pageSize;			
+				var i = page.addrPhysical / CPU.pageSize;			
 				Debug.Assert(i < freePhysicalPages.Length); //has to be
 				freePhysicalPages[(int)i] = true;
 			}
@@ -414,7 +417,7 @@ namespace Hanselman.CST352
 			page.heapAllocationAddr = 0;
 
 			// Delete this page's swap file
-			string filename = System.Environment.CurrentDirectory + "/page" + page.pageNumber + "." + page.addrVirtual + ".xml";
+			var filename = $"{Environment.CurrentDirectory}/page{page.pageNumber}.{page.addrVirtual}.xml";
 			File.Delete(filename);
 		}
 
@@ -428,7 +431,7 @@ namespace Hanselman.CST352
 		{
 			if (page.isValid == false)
 			{
-				int i = 0;
+				var i = 0;
 				for (; i < freePhysicalPages.Length; i++)
 				{
 					if (freePhysicalPages[i] == true)
@@ -476,8 +479,8 @@ namespace Hanselman.CST352
 			}
 
 			// Adjust the physical address with pageOffset from a page boundary
-			uint pageOffset = virtualIndex % CPU.pageSize;
-			uint physicalIndex = page.addrPhysical+pageOffset;
+			var pageOffset = virtualIndex % CPU.pageSize;
+			var physicalIndex = page.addrPhysical+pageOffset;
 			return physicalIndex;
 		}
 		
@@ -491,32 +494,28 @@ namespace Hanselman.CST352
 		{
 			get
 			{
-				uint physicalIndex = ProcessAddrToPhysicalAddr(processid, processMemoryIndex, false);
+				var physicalIndex = ProcessAddrToPhysicalAddr(processid, processMemoryIndex, false);
 				return CPU.physicalMemory[physicalIndex];
 			}
 			set 
 			{
-				uint physicalIndex = ProcessAddrToPhysicalAddr(processid, processMemoryIndex, true);
+				var physicalIndex = ProcessAddrToPhysicalAddr(processid, processMemoryIndex, true);
 				CPU.physicalMemory[physicalIndex] = value;
 			}
 		}
 
-		/// <summary>
-		/// Helper method to translate # of bytes to # of Memory Pages
-		/// </summary>
-		/// <param name="bytes">bytes to translate</param>
-		/// <returns>number of pages</returns>
-		public static uint BytesToPages(uint bytes)
-		{
-			return (CPU.UtilRoundToBoundary(bytes, CPU.pageSize)/CPU.pageSize);
-			//return ((uint)(bytes / CPU.pageSize) + (uint)(bytes % CPU.pageSize));
-		}
+        /// <summary>
+        /// Helper method to translate # of bytes to # of Memory Pages
+        /// </summary>
+        /// <param name="bytes">bytes to translate</param>
+        /// <returns>number of pages</returns>
+        public static uint BytesToPages(uint bytes) => (CPU.UtilRoundToBoundary(bytes, CPU.pageSize) / CPU.pageSize);
 
-		/// <summary>
-		/// Takes a Process's ID and releases all MemoryPages assigned to it, zeroing and reseting them
-		/// </summary>
-		/// <param name="pid">Process ID</param>
-		public void ReleaseMemoryOfProcess(uint pid)
+        /// <summary>
+        /// Takes a Process's ID and releases all MemoryPages assigned to it, zeroing and reseting them
+        /// </summary>
+        /// <param name="pid">Process ID</param>
+        public void ReleaseMemoryOfProcess(uint pid)
 		{
 			foreach (MemoryPage page in _pageTable)
 			{
@@ -531,7 +530,7 @@ namespace Hanselman.CST352
 
 				if (page.SharedMemoryRegion != 0)
 				{
-					for (int i = 0; i <= page.pidSharedOwnerList.Count-1; i++)
+					for (var i = 0; i <= page.pidSharedOwnerList.Count-1; i++)
 					{
 						// Do we own this page?
 						if ((uint)page.pidSharedOwnerList[i] == pid)
@@ -554,9 +553,11 @@ namespace Hanselman.CST352
 		/// <param name="newvalue">the new value of the byte</param>
 		public void SetMemoryOfProcess(uint pid, uint start, uint length, byte newvalue)
 		{
-			for (uint i = start; i < (start+length);i++)
-				this[pid,i] = newvalue;
-		}
+			for (var i = start; i < (start+length);i++)
+            {
+                this[pid,i] = newvalue;
+            }
+        }
 
 		/// <summary>
 		/// Maps the shared memory region to the process passed in
@@ -566,8 +567,8 @@ namespace Hanselman.CST352
 		/// <returns>the index in process memory of the shared region</returns>
 		public uint MapSharedMemoryToProcess(uint memoryRegion, uint pid)
 		{
-			uint SharedRegionsSize = uint.Parse(EntryPoint.Configuration["SharedMemoryRegionSize"]);
-			uint PagesNeeded = (uint)(SharedRegionsSize/CPU.pageSize);
+			var SharedRegionsSize = uint.Parse(EntryPoint.Configuration["SharedMemoryRegionSize"]);
+			var PagesNeeded = (uint)(SharedRegionsSize/CPU.pageSize);
 
 			uint startAddrProcessIndex;
 			uint addrProcessIndex = 0;
@@ -611,7 +612,7 @@ namespace Hanselman.CST352
 		/// <param name="pid">Process ID</param>
 		public void MapMemoryToProcess(uint bytes, uint pid)
 		{
-			uint pagesNeeded = BytesToPages(bytes);
+			var pagesNeeded = BytesToPages(bytes);
 			uint addrProcessIndex = 0;
 						
 			foreach (MemoryPage page in _pageTable)
@@ -769,24 +770,26 @@ namespace Hanselman.CST352
 			{
 
 				// Generate a filename based on address and page number
-				string filename = System.Environment.CurrentDirectory + "/page" + victim.pageNumber + "-" + victim.addrVirtual + ".xml";
+				var filename = Environment.CurrentDirectory + "/page" + victim.pageNumber + "-" + victim.addrVirtual + ".xml";
 
 //				IFormatter ser = new BinaryFormatter();
 //				Stream writer = new FileStream(filename, FileMode.Create);
 
-				XmlSerializer ser = new XmlSerializer(typeof(MemoryPageValue));
+				var ser = new XmlSerializer(typeof(MemoryPageValue));
 				Stream fs = new FileStream(filename, FileMode.Create);
 				XmlWriter writer = new XmlTextWriter(fs, new UTF8Encoding());
 
-				MemoryPageValue pageValue = new MemoryPageValue();
+				var pageValue = new MemoryPageValue();
 
 				// Copy the bytes from Physical Memory so we don't pageFault in a Fault Hander
-				byte[] bytes = new byte[CPU.pageSize];
-				for (int i = 0; i < CPU.pageSize; i++)
-					bytes[i] = CPU.physicalMemory[victim.addrPhysical+i];
+				var bytes = new byte[CPU.pageSize];
+				for (var i = 0; i < CPU.pageSize; i++)
+                {
+                    bytes[i] = CPU.physicalMemory[victim.addrPhysical+i];
+                }
 
-				// Copy details from the MemoryPage to the MemoryPageValue
-				pageValue.memory = bytes;
+                // Copy details from the MemoryPage to the MemoryPageValue
+                pageValue.memory = bytes;
 				pageValue.accessCount = victim.accessCount;
 				pageValue.lastAccessed = victim.lastAccessed;
 
@@ -809,26 +812,28 @@ namespace Hanselman.CST352
 		public void SwapIn(MemoryPage winner)
 		{
 			// Generate a filename based on address and page number
-			string filename = System.Environment.CurrentDirectory + "/page" + winner.pageNumber + "-" + winner.addrVirtual + ".xml";
+			var filename = Environment.CurrentDirectory + "/page" + winner.pageNumber + "-" + winner.addrVirtual + ".xml";
 			if (File.Exists(filename) && winner.isValid == false)
 			{
 				//BinaryFormatter ser = new BinaryFormatter();
 				//Stream reader = new FileStream(filename, FileMode.Open);
 
-				XmlSerializer ser = new XmlSerializer(typeof(MemoryPageValue));
+				var ser = new XmlSerializer(typeof(MemoryPageValue));
 				Stream fs = new FileStream(filename, FileMode.Open);
 				XmlReader reader = new XmlTextReader(fs);
 
 				// Load the MemoryPageValue in from Disk!
-				MemoryPageValue pageValue = (MemoryPageValue)ser.Deserialize(reader);
+				var pageValue = (MemoryPageValue)ser.Deserialize(reader);
 				
 				// Copy the bytes from Physical Memory so we don't pageFault in a Fault Hander
-				for (int i = 0; i < CPU.pageSize; i++)
-					CPU.physicalMemory[winner.addrPhysical+i] = pageValue.memory[i];
+				for (var i = 0; i < CPU.pageSize; i++)
+                {
+                    CPU.physicalMemory[winner.addrPhysical+i] = pageValue.memory[i];
+                }
 
-				//Console.WriteLine("Swapping in page {0} at physical memory {1}",winner.pageNumber, winner.addrPhysical);
-				
-				winner.accessCount = pageValue.accessCount;
+                //Console.WriteLine("Swapping in page {0} at physical memory {1}",winner.pageNumber, winner.addrPhysical);
+
+                winner.accessCount = pageValue.accessCount;
 				winner.lastAccessed = pageValue.lastAccessed;
 
 				pageValue = null;
@@ -893,15 +898,12 @@ namespace Hanselman.CST352
 			processAddress = addrIn;			
 		}
 
-		/// <summary>
-		/// Pretty printing for MemoryExceptions
-		/// </summary>
-		/// <returns>Formatted string about the MemoryException</returns>
-		public override string ToString()
-		{
-			return String.Format("Process {0} tried to access memory at address {1} and will be terminated! ",pid, processAddress);
-		}
-	}
+        /// <summary>
+        /// Pretty printing for MemoryExceptions
+        /// </summary>
+        /// <returns>Formatted string about the MemoryException</returns>
+        public override string ToString() => string.Format("Process {0} tried to access memory at address {1} and will be terminated! ", pid, processAddress);
+    }
 
 	/// <summary>
 	/// Memory Protection: MemoryExceptions are constructed and thrown 
@@ -929,15 +931,12 @@ namespace Hanselman.CST352
 			tooManyBytes = tooManyBytesIn;			
 		}
 
-		/// <summary>
-		/// Pretty printing for MemoryExceptions
-		/// </summary>
-		/// <returns>Formatted string about the MemoryException</returns>
-		public override string ToString()
-		{
-			return String.Format("Process {0} tried to push {1} too many bytes on to the stack and will be terminated! ",pid, tooManyBytes);
-		}
-	}
+        /// <summary>
+        /// Pretty printing for MemoryExceptions
+        /// </summary>
+        /// <returns>Formatted string about the MemoryException</returns>
+        public override string ToString() => string.Format("Process {0} tried to push {1} too many bytes on to the stack and will be terminated! ", pid, tooManyBytes);
+    }
 
 	/// <summary>
 	/// Memory Protection: MemoryExceptions are constructed and thrown 
@@ -965,15 +964,12 @@ namespace Hanselman.CST352
 			tooManyBytes = tooManyBytesIn;			
 		}
 
-		/// <summary>
-		/// Pretty printing for MemoryExceptions
-		/// </summary>
-		/// <returns>Formatted string about the MemoryException</returns>
-		public override string ToString()
-		{
-			return String.Format("Process {0} tried to alloc {1} bytes more from the heap than were free and will be terminated! ",pid, tooManyBytes);
-		}
-	}
+        /// <summary>
+        /// Pretty printing for MemoryExceptions
+        /// </summary>
+        /// <returns>Formatted string about the MemoryException</returns>
+        public override string ToString() => string.Format("Process {0} tried to alloc {1} bytes more from the heap than were free and will be terminated! ", pid, tooManyBytes);
+    }
 
 
 }

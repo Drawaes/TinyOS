@@ -36,31 +36,28 @@ using System.Text.RegularExpressions;
 
 namespace Hanselman.CST352
 {
-	/// <summary>
-	/// Represents a single line in a program, consisting of an <see cref="OpCode"/> 
-	/// and one or two optional parameters.  An instruction can parse a raw instruction from a test file.
-	/// Tge instruction is then loaded into an <see cref="InstructionCollection"/> which is a member of
-	/// <see cref="Program"/>.  The <see cref="InstructionCollection"/> is translated into bytes that are 
-	/// loaded into the processes memory space.  It's never used again, but it's a neat overly object oriented
-	/// construct that simplified the coding of the creation of a <see cref="Program"/> and complicated the 
-	/// running of the whole system.  It was worth it though.
-	/// </summary>
-	public class Instruction
+    /// <summary>
+    /// Represents a single line in a program, consisting of an <see cref="OpCode"/> 
+    /// and one or two optional parameters.  An instruction can parse a raw instruction from a test file.
+    /// The instruction is then loaded into a list that is a member of
+    /// <see cref="Program"/>.  The list is translated into bytes that are 
+    /// loaded into the processes memory space.  It's never used again, but it's a neat overly object oriented
+    /// construct that simplified the coding of the creation of a <see cref="Program"/> and complicated the 
+    /// running of the whole system.  It was worth it though.
+    /// </summary>
+    public class Instruction
 	{
 
-		/// <summary>
-		/// Overridden method for pretty printing of Instructions
-		/// </summary>
-		/// <returns>A formatted string representing an Instruction</returns>
-		public override string ToString()
-		{
-			return String.Format("OpCode: {0,-2:G} {1,-12:G}   Param1: {2,4:G}   Param2: {3,4:G}", (byte)this.OpCode, this.OpCode, this.Param1 == uint.MaxValue? "" :this.Param1.ToString(),this.Param2 == uint.MaxValue ? "" :this.Param2.ToString());
-		}
+        /// <summary>
+        /// Overridden method for pretty printing of Instructions
+        /// </summary>
+        /// <returns>A formatted string representing an Instruction</returns>
+        public override string ToString() => string.Format("OpCode: {0,-2:G} {1,-12:G}   Param1: {2,4:G}   Param2: {3,4:G}", (byte)OpCode, OpCode, Param1 == uint.MaxValue ? "" : Param1.ToString(), Param2 == uint.MaxValue ? "" : Param2.ToString());
 
-		/// <summary>
-		/// The OpCode for this Instruction
-		/// </summary>
-		public InstructionType OpCode;
+        /// <summary>
+        /// The OpCode for this Instruction
+        /// </summary>
+        public InstructionType OpCode;
 
 		/// <summary>
 		/// The first parameter to the opCode.  May be a Constant or a Register value, or not used at all
@@ -92,20 +89,20 @@ namespace Hanselman.CST352
 		/// </example>
 		public Instruction(string rawInstruction)
 		{
-			Regex r = new Regex("(?:;.+)|\\A(?<opcode>\\d+){1}|\\sr(?<param>[-]*\\d)|\\$(?<const>[-]*\\d+)");
+			var r = new Regex("(?:;.+)|\\A(?<opcode>\\d+){1}|\\sr(?<param>[-]*\\d)|\\$(?<const>[-]*\\d+)");
 			
-			MatchCollection matchcol = r.Matches(rawInstruction);
+			var matchcol = r.Matches(rawInstruction);
 			foreach(Match m in matchcol)
 			{
-				GroupCollection g = m.Groups;
+				var g = m.Groups;
 
-				for (int i = 1; i < g.Count ; i++) 
+				for (var i = 1; i < g.Count ; i++) 
 				{
 					if (g[i].Value.Length != 0 ) 
 					{
 						if (r.GroupNameFromNumber(i) == "opcode")
 						{
-							this.OpCode = (InstructionType)byte.Parse(g[i].Value);	
+                            OpCode = (InstructionType)byte.Parse(g[i].Value);	
 						}
 								
 						if (r.GroupNameFromNumber(i) == "param" || r.GroupNameFromNumber(i) == "const")
@@ -114,16 +111,21 @@ namespace Hanselman.CST352
 							// Treat them as uints for storage
 							// This will only affect negative numbers, and 
 							// VERY large unsigned numbers
-							if (uint.MaxValue == this.Param1) 
-								this.Param1 = uint.Parse(g[i].Value);	
-							else if (uint.MaxValue == this.Param2) 
+							if (uint.MaxValue == Param1)
+                            {
+                                Param1 = uint.Parse(g[i].Value);
+                            }
+                            else if (uint.MaxValue == Param2) 
 							{
 								if (g[i].Value[0] == '-')
-									this.Param2 = (uint)int.Parse(g[i].Value);	
-								else
-									this.Param2 = uint.Parse(g[i].Value);	
-
-							}
+                                {
+                                    Param2 = (uint)int.Parse(g[i].Value);
+                                }
+                                else
+                                {
+                                    Param2 = uint.Parse(g[i].Value);
+                                }
+                            }
 						}
 
 					}

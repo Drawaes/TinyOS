@@ -49,7 +49,7 @@ namespace Hanselman.CST352
 		/// The size of a memory page for this system.  This should be a multiple of 4.  Small sizes (like 4) will
 		/// cause the system to thrash and page often.  16 is a nice compromise for such a small system.  
 		/// 64 might also work well.  This probably won't change, but it is nice to be able to.  
-		/// This is loaded from Configuration on a call to <see cref="initPhysicalMemory"/>
+		/// This is loaded from Configuration on a call to <see cref="InitPhysicalMemory"/>
 		/// </summary>
 		public static uint pageSize = 0; 
 
@@ -67,11 +67,11 @@ namespace Hanselman.CST352
 		/// Initialized our <see cref="physicalMemory"/> array that represents physical memory.  Should only be called once.
 		/// </summary>
 		/// <param name="memorySize">The size of physical memory</param>
-		public static void initPhysicalMemory(uint memorySize)
+		public static void InitPhysicalMemory(uint memorySize)
 		{
 			pageSize = uint.Parse(EntryPoint.Configuration["MemoryPageSize"]);
 
-			uint newMemorySize = UtilRoundToBoundary(memorySize, CPU.pageSize);
+			var newMemorySize = UtilRoundToBoundary(memorySize, CPU.pageSize);
 
 			// Initalize Physical Memory
 			physicalMemory = new byte[newMemorySize];
@@ -86,7 +86,7 @@ namespace Hanselman.CST352
 		internal static byte[] physicalMemory;
 
 		/// <summary>
-		/// We have 10 registers.  R11 is the <see cref="ip"/>, and we don't use R0.  R10 is the <see cref="sp"/>.  So, that's 1 to 10, and 11.
+		/// We have 10 registers.  R11 is the <see cref="IP"/>, and we don't use R0.  R10 is the <see cref="SP"/>.  So, that's 1 to 10, and 11.
 		/// </summary>
 		internal static uint[] registers = new uint[12]; //0 to 11
 
@@ -99,51 +99,51 @@ namespace Hanselman.CST352
 		/// <summary>
 		/// Public get/set accessor for the Sign Flag
 		/// </summary>
-		public static bool sf 
+		public static bool SF 
 		{
-			get { return bitFlagRegisters[0]; }
-			set { bitFlagRegisters[0] = value; }
-		}
+            get => bitFlagRegisters[0];
+            set => bitFlagRegisters[0] = value;
+        }
 
 		/// <summary>
 		/// Public get/set accessor for the Zero Flag
 		/// </summary>
-		public static bool zf 
+		public static bool ZF 
 		{
-			get { return bitFlagRegisters[1]; }
-			set	{ bitFlagRegisters[1] = value; }
-		}
+            get => bitFlagRegisters[1];
+            set => bitFlagRegisters[1] = value;
+        }
 
 		/// <summary>
 		/// Public get/set accessor for Stack Pointer
 		/// </summary>
-		public static uint sp 
+		public static uint SP 
 		{
-			get	{ return CPU.registers[10]; }
-			set	{ CPU.registers[10] = value; }
-		}
+            get => registers[10];
+            set => registers[10] = value;
+        }
 
 		/// <summary>
 		/// Public get/set access for the CPU's Instruction Pointer
 		/// </summary>
-		public static uint ip
+		public static uint IP
 		{
-			get { return CPU.registers[11];	}
-			set	{ CPU.registers[11] = value; }
-		}
+            get => registers[11];
+            set => registers[11] = value;
+        }
 		#endregion
 
 
 		/// <summary>
-		/// Takes the process id from the <see cref="OS.currentProcess"/> and the CPU's <see cref="ip"/> and 
+		/// Takes the process id from the <see cref="OS.currentProcess"/> and the CPU's <see cref="IP"/> and 
 		/// gets the next <see cref="Instruction"/> from memory.  The <see cref="InstructionType"/> translates 
-		/// via an array of <see cref="SystemCall"/>s and retrives a <see cref="Delegate"/> from <see cref="opCodeToSysCall"/>
+		/// via an array of <see cref="SystemCall"/>s and retrives a <see cref="Delegate"/> from <see cref="OpCodeToSysCall"/>
 		/// and calls it.
 		/// </summary>
-		public static void executeNextOpCode()
+		public static void ExecuteNextOpCode()
 		{
 			// The opCode still is pointed to by CPU.ip, but the memory access is protected
-			opCodeToSysCall((InstructionType)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.ip]);
+			OpCodeToSysCall((InstructionType)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.IP]);
 			CPU.clock++;
 		}
 		
@@ -152,7 +152,7 @@ namespace Hanselman.CST352
 		/// retrives a <see cref="Delegate"/> and calls it.
 		/// </summary>
 		/// <param name="opCode">An <see cref="InstructionType"/> enum that maps to a <see cref="SystemCall"/></param>
-		public static void opCodeToSysCall(InstructionType opCode)
+		public static void OpCodeToSysCall(InstructionType opCode)
 		{
 			#region System Calls Map
 			SystemCall[] sysCalls = 
@@ -226,19 +226,19 @@ namespace Hanselman.CST352
 			Console.WriteLine("               r3 {0,-8:G}    (pid) r8  {1,-8:G}",registers[3],registers[8]);
 			Console.WriteLine("               r4 {0,-8:G}   (data) r9  {1,-8:G}",registers[4],registers[9]);
 			Console.WriteLine("               r5 {0,-8:G}     (sp) r10 {1}",registers[5],registers[10]);
-			Console.WriteLine("               sf {0,-8:G}          ip  {1}",CPU.sf,CPU.ip);
-			Console.WriteLine("               zf {0,-8:G}      ",CPU.zf);
+			Console.WriteLine("               sf {0,-8:G}          ip  {1}",CPU.SF,CPU.IP);
+			Console.WriteLine("               zf {0,-8:G}      ",CPU.ZF);
 		}
 
 		/// <summary>
-		/// Dumps the current <see cref="Instruction"/> for the current process at the current <see cref="ip"/>
+		/// Dumps the current <see cref="Instruction"/> for the current process at the current <see cref="IP"/>
 		/// </summary>
 		public static void DumpInstruction()
 		{
 			if (bool.Parse(EntryPoint.Configuration["DumpInstruction"]) == false)
 				return;
 
-			Console.WriteLine(" Pid:{0} {1} {2}",CPU.registers[8],(InstructionType)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.ip],(uint)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.ip]);
+			Console.WriteLine(" Pid:{0} {1} {2}",CPU.registers[8],(InstructionType)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.IP],(uint)theOS.memoryMgr[theOS.currentProcess.PCB.pid,CPU.IP]);
 		}
 
 		/// <summary>
@@ -249,8 +249,8 @@ namespace Hanselman.CST352
 			if (bool.Parse(EntryPoint.Configuration["DumpPhysicalMemory"]) == false)
 				return;
 
-			int address = 0;
-			foreach (byte b in physicalMemory)
+			var address = 0;
+			foreach (var b in physicalMemory)
 			{
 				if (address == 0 || address%16==0)
 					Console.Write(System.Environment.NewLine + "{0,-4:000} ", address);
@@ -277,7 +277,7 @@ namespace Hanselman.CST352
 			fixed(byte* otherbytes = BytesIn)
 			{
 				uint newUint = 0;
-				uint* ut = (uint*)&otherbytes[0];
+				var ut = (uint*)&otherbytes[0];
 				newUint = *ut;
 				return newUint;
 			}
@@ -291,9 +291,9 @@ namespace Hanselman.CST352
 		public unsafe static byte[] UIntToBytes(uint UIntIn)
 		{
 			//turn a uint into 4 bytes
-			byte[] fourBytes = new byte[4];
-			uint* pt = &UIntIn;
-			byte* bt = (byte*)&pt[0];
+			var fourBytes = new byte[4];
+			var pt = &UIntIn;
+			var bt = (byte*)&pt[0];
 			fourBytes[0] = *bt++;
 			fourBytes[1] = *bt++;
 			fourBytes[2] = *bt++;
@@ -309,7 +309,7 @@ namespace Hanselman.CST352
 		/// <returns>new rounded number</returns>
 		public static uint UtilRoundToBoundary(uint number, uint boundary)
 		{
-			uint newNumber = (uint)(boundary * ((number / boundary) + ((number % boundary > 0) ? 1: 0)));
+			var newNumber = (uint)(boundary * ((number / boundary) + ((number % boundary > 0) ? 1: 0)));
 			return newNumber;
 		}
 		#endregion

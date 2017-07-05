@@ -35,6 +35,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Configuration;
+using System.Collections.Generic;
 
 namespace Hanselman.CST352
 {
@@ -44,57 +45,55 @@ namespace Hanselman.CST352
 	/// </summary>
 	public class Program
 	{
-		private InstructionCollection instructions = null;
+		private List<Instruction> instructions = null;
 
-		/// <summary>
-		/// Public constructor for a Program
-		/// </summary>
-		/// <param name="instructionsParam">The collection of <see cref="Instruction"/> objects that make up this Program</param>
-		public Program(InstructionCollection instructionsParam)
+        /// <summary>
+        /// Public constructor for a Program
+        /// </summary>
+        /// <param name="instructionsParam">The collection of <see cref="Instruction"/> objects that make up this Program</param>
+        public Program(IEnumerable<Instruction> instructionsParam) => instructions = new List<Instruction>(instructionsParam);
+
+        /// <summary>
+        /// Spins through the list of <see cref="Instruction"/> and creates an array of bytes 
+        /// that is then copied into Memory by <see cref="OS.CreateProcess"/>
+        /// </summary>
+        /// <returns>Array of bytes representing the <see cref="Program"/> in memory</returns>
+        unsafe public byte[] GetMemoryImage()
 		{
-			instructions = new InstructionCollection(instructionsParam);
-		}
+            var listInstr = new List<byte>();
 
-		/// <summary>
-		/// Spins through the <see cref="InstructionCollection"/> and creates an array of bytes 
-		/// that is then copied into Memory by <see cref="OS.createProcess"/>
-		/// </summary>
-		/// <returns>Array of bytes representing the <see cref="Program"/> in memory</returns>
-		unsafe public byte[] GetMemoryImage()
-		{
-			ArrayList arrayListInstr = new ArrayList();
-
-			foreach (Instruction instr in instructions)
+			foreach (var instr in instructions)
 			{
 				// Instructions are one byte
-				arrayListInstr.Add((byte)instr.OpCode);
+				listInstr.Add((byte)instr.OpCode);
 				
 				// Params are Four Bytes
 				if (instr.Param1 != uint.MaxValue)
 				{
-					byte[] paramBytes = CPU.UIntToBytes(instr.Param1);
-					for (int i = 0; i < paramBytes.Length; i++)
-						arrayListInstr.Add(paramBytes[i]);	
-				}
+					var paramBytes = CPU.UIntToBytes(instr.Param1);
+					for (var i = 0; i < paramBytes.Length; i++)
+                    {
+                        listInstr.Add(paramBytes[i]);
+                    }
+                }
 				
 				if (instr.Param2 != uint.MaxValue)
 				{
-					byte[] paramBytes = CPU.UIntToBytes(instr.Param2);
-                    for (int i = 0; i < paramBytes.Length; i++)
-						arrayListInstr.Add(paramBytes[i]);	
-				}
+					var paramBytes = CPU.UIntToBytes(instr.Param2);
+                    for (var i = 0; i < paramBytes.Length; i++)
+                    {
+                        listInstr.Add(paramBytes[i]);
+                    }
+                }
 			}
 			
 			// Create and array of bytes and return the instructions in it
-			arrayListInstr.TrimToSize();
-			byte[] arrayInstr = new byte[arrayListInstr.Count];
-			arrayListInstr.CopyTo(arrayInstr);
-			return arrayInstr;
+			return listInstr.ToArray();
 		}
 
 		/// <summary>
 		/// Loads a Program from a file on disk.  For each line the Program, create an <see cref="Instruction"/>
-		/// and pass the raw string to the Instructions's constructor.  The resulting <see cref="InstructionCollection"/>
+		/// and pass the raw string to the Instructions's constructor.  The resulting list of <see cref="Instruction"/>
 		/// is the Program
 		/// </summary>
 		/// <param name="fileName">file with code to load</param>
@@ -103,14 +102,14 @@ namespace Hanselman.CST352
 		{
             using (TextReader t = File.OpenText(fileName))
             {
-                InstructionCollection instructions = new InstructionCollection();
-                string strRawInstruction = t.ReadLine();
+                var instructions = new List<Instruction>();
+                var strRawInstruction = t.ReadLine();
                 while (strRawInstruction != null)
                 {
                     instructions.Add(new Instruction(strRawInstruction));
                     strRawInstruction = t.ReadLine();
                 }
-                Program p = new Program(instructions);
+                var p = new Program(instructions);
                 t.Close();
                 return p;
             }
@@ -124,9 +123,12 @@ namespace Hanselman.CST352
 			if (bool.Parse(EntryPoint.Configuration["DumpProgram"]) == false)
 				return;
 
-			foreach (Instruction i in this.instructions)
-				Console.WriteLine(i.ToString());
-			Console.WriteLine();
+			foreach (var i in instructions)
+            {
+                Console.WriteLine(i.ToString());
+            }
+
+            Console.WriteLine();
 		}
 	}
 }

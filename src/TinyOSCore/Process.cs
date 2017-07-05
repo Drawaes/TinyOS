@@ -33,6 +33,8 @@
 //
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using static Hanselman.CST352.MemoryManager;
 
 namespace Hanselman.CST352
 {
@@ -42,22 +44,19 @@ namespace Hanselman.CST352
 	/// so two Processes can be compared with &gt; and &lt;.  This will allow easy sorting of the runningProcesses table 
 	/// based on <see cref="ProcessControlBlock.priority"/>.
 	/// </summary>
-	public class Process : IComparable
+	public class Process : IComparable<Process>
 	{
-		/// <summary>
-		/// Process Constructor
-		/// </summary>
-		/// <param name="processId">the readonly unique id for this Process</param>
-		/// <param name="memorySize">the ammount of memory this Process and address</param>
-		public Process(uint processId, uint memorySize)		
-		{
-			PCB = new ProcessControlBlock(processId, memorySize);
-		}
+        /// <summary>
+        /// Process Constructor
+        /// </summary>
+        /// <param name="processId">the readonly unique id for this Process</param>
+        /// <param name="memorySize">the ammount of memory this Process and address</param>
+        public Process(uint processId, uint memorySize) => PCB = new ProcessControlBlock(processId, memorySize);
 
-		/// <summary>
-		/// 
-		/// </summary>
-		public ProcessControlBlock PCB;
+        /// <summary>
+        /// 
+        /// </summary>
+        public ProcessControlBlock PCB;
 
 
 		/// <summary>
@@ -65,7 +64,7 @@ namespace Hanselman.CST352
 		/// instance field initializers.  Maintains things like <see cref="registers"/> and <see cref="clockCycles"/> for this
 		/// Process.
 		/// 
-		/// Global Data Region at R9 and SP at R10 are set in <see cref="OS.createProcess"/>
+		/// Global Data Region at R9 and SP at R10 are set in <see cref="OS.CreateProcess"/>
 		/// </summary>
 		public class ProcessControlBlock
 		{
@@ -113,9 +112,9 @@ namespace Hanselman.CST352
 			public uint heapAddrEnd = 0;
 
 			/// <summary>
-			/// ArrayList of MemoryPages that are associated with the Heap for this Process
+			/// List of MemoryPages that are associated with the Heap for this Process
 			/// </summary>
-			public ArrayList heapPageTable = new ArrayList();
+			public List<MemoryPage> heapPageTable = new List<MemoryPage>();
 
 			/// <summary>
 			/// The ammount of memory this Process is allowed to access.
@@ -130,7 +129,7 @@ namespace Hanselman.CST352
 			public ProcessState state = ProcessState.NewProcess;
 
 			/// <summary>
-			/// We have 10 registers.  R11 is the <see cref="ip"/>, and we don't use R0.  R10 is the <see cref="sp"/>.  So, that's 1 to 10, and 11.
+			/// We have 10 registers.  R11 is the <see cref="IP"/>, and we don't use R0.  R10 is the <see cref="SP"/>.  So, that's 1 to 10, and 11.
 			/// </summary>
 			public uint[] registers = new uint[12]; 
 
@@ -188,38 +187,38 @@ namespace Hanselman.CST352
 			/// <summary>
 			/// Public get/set accessor for the Sign Flag
 			/// </summary>
-			public bool sf //Sign Flag
+			public bool SF //Sign Flag
 			{
-				get { return bitFlagRegisters[0]; }
-				set	{ bitFlagRegisters[0] = value; }
-			}
+                get => bitFlagRegisters[0];
+                set => bitFlagRegisters[0] = value;
+            }
 
 			/// <summary>
 			/// Public get/set accessor for the Zero Flag
 			/// </summary>
-			public bool zf //Zero Flag
+			public bool ZF //Zero Flag
 			{
-				get { return bitFlagRegisters[1]; }
-				set	{ bitFlagRegisters[1] = value; }
-			}
+                get => bitFlagRegisters[1];
+                set => bitFlagRegisters[1] = value;
+            }
 
 			/// <summary>
 			/// Public get/set accessor for the Stack Pointer
 			/// </summary>
-			public uint sp
+			public uint SP
 			{
-				get	{ return registers[10]; }
-				set	{ registers[10] = value; }
-			}
+                get => registers[10];
+                set => registers[10] = value;
+            }
 
 			/// <summary>
 			/// Public get/set accessor for the Instruction Pointer
 			/// </summary>
-			public uint ip
+			public uint IP
 			{
-				get { return registers[11];	}
-				set	{ registers[11] = value; }
-			}
+                get => registers[11];
+                set => registers[11] = value;
+            }
 			#endregion
 		}
 
@@ -234,29 +233,28 @@ namespace Hanselman.CST352
 		/// Greater than an zero   This instance is greater than obj
 		/// </pre>
 		/// </summary>
-		/// <param name="obj"></param>
+		/// <param name="p"></param>
 		/// <returns></returns>
-		public int CompareTo(object obj)
-		{
-			if (obj is Process)
-			{
-				//We want to sort HIGHEST priority first (reverse of typical)
-				// Meaning 9,8,7,6,5,4,3,2,1 
-				Process p = (Process)obj;
-				if (this.PCB.priority < p.PCB.priority)  return 1;
-				if (this.PCB.priority > p.PCB.priority)  return -1;
-				if (this.PCB.priority == p.PCB.priority)
-				{
-					//Make sure potentially starved processes get a chance
-					if (this.PCB.clockCycles < p.PCB.clockCycles) return 1;
-					if (this.PCB.clockCycles > p.PCB.clockCycles) return -1;
-				}
-				return 0;
-			}
-			else 
-				throw new ArgumentException();
-		}
-	}
+        public int CompareTo(Process p)
+        {
+            if (PCB.priority < p.PCB.priority) return 1;
+            if (PCB.priority > p.PCB.priority) return -1;
+            if (PCB.priority == p.PCB.priority)
+            {
+                //Make sure potentially starved processes get a chance
+                if (PCB.clockCycles < p.PCB.clockCycles)
+                {
+                    return 1;
+                }
+
+                if (PCB.clockCycles > p.PCB.clockCycles)
+                {
+                    return -1;
+                }
+            }
+            return 0;
+        }
+    }
 	#region Process-specific enums
 
 	/// <summary>
@@ -289,7 +287,7 @@ namespace Hanselman.CST352
 		/// </summary>
 		WaitingOnEvent,
 		/// <summary>
-		/// The state of a <see cref="Process"/> waiting to be removed from the Running <see cref="ProcessCollection"/>
+		/// The state of a <see cref="Process"/> waiting to be removed from the Running list of <see cref="Process"/>
 		/// </summary>
 		Terminated
 	}
